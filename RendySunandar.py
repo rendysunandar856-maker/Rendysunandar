@@ -454,7 +454,7 @@ def cybersecurity_tools():
  print("[1] Brute Force Login (HTTP/POST)")
  print("[2] Brute Squid Proxy Checker")
  print("[3] Port Scanner (TCP)")
- print("[4] DNS Bruteforce (Subdomain)"
+ print("[4] DNS Bruteforce (Subdomain)")
  print("[5] Crack Password ZIP")
  print("[6] Crack Password 7Z")
  print("[7] Cek Port TCP (Single)")
@@ -530,70 +530,3 @@ def python_tools():
  print(os.getcwd())
  elif pilih == "0":
  return
- else:
- print("Pilihan tidak valid.")
-
- jeda()
-
-
-# =========================================
-# PROFIL
-# =========================================
-
-def profil():
- print("\n" + RED + "=== PROFIL ===" + RESET)
- print("Nama: Rendy Sunandar")
- print("Kelas: 11 TKJ")
- print("Project: Ren.sigma")
- print("Fokus: Hacking & Networking")
- jeda()
-
-
-# =========================================
-# MENU UTAMA
-# =========================================
-
-def menu():
- while True:
- judul()
- print("[1] Informasi sistem")
- print("[2] Cek koneksi internet")
- print("[3] Informasi jaringan")
- print("[4] Python tools")
- print("[5] Profil")
- print("[6] Cybersecurity tools")
- print("[0] Keluar")
-
- pilih = input("\nPilih menu: ").strip()
-
- if pilih == "1":
- system_info()
- elif pilih == "2":
- cek_internet()
- elif pilih == "3":
- info_jaringan()
- elif pilih == "4":
- python_tools()
- elif pilih == "5":
- profil()
- elif pilih == "6":
- cybersecurity_tools()
- elif pilih == "0":
- print(GREEN + "Terima kasih telah menggunakan Ren.sigma." + RESET)
- break
- else:
- print("Pilihan tidak valid.")
- jeda()
-
-
-# =========================================
-# PROGRAM UTAMA
-# =========================================
-
-if __name__ == "__main__":
- try:
- tampilkan_gambar()
- header()
- menu()
- except (KeyboardInterrupt, EOFError):
- print("\n" + YELLOW + "Program dihentikan." + RESET)
