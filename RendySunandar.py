@@ -225,4 +225,4 @@ def dir_finder():
         try:
             target_url = url.rstrip("/") + d
             req = urllib.request.Request(target_url, method="HEAD")
-            req.add_header("User-Agent", "RenSigma/1.0
+            req.add_header("User-Agent", "RenSigma/1.0")
