@@ -1,264 +1,513 @@
 
-import socket
+#!/usr/bin/env python3
+# Ren.sigma - Network Security Edition
+# Gunakan hanya pada sistem, jaringan, dan file yang kamu punya izin
+# untuk menguji atau menganalisis.
+
+import os
+import re
 import ssl
+import sys
+import json
+import math
+import socket
+import hashlib
+import ipaddress
+import platform
 import urllib.request
 import urllib.error
-import platform
-import os
-import ipaddress
-from datetime import datetime, timezone
+from datetime import datetime
 from urllib.parse import urlparse
 
-RED = "\033[91m"
-GREEN = "\033[92m"
-YELLOW = "\033[93m"
-CYAN = "\033[96m"
+VERSION = "2.0"
+IMAGE_URL = (
+    "https://raw.githubusercontent.com/rendysunandar856-maker/"
+    "Rendysunandar/main/anime_baru.jpg"
+)
+
+R = "\033[91m"
+G = "\033[92m"
+Y = "\033[93m"
+C = "\033[96m"
+W = "\033[97m"
 RESET = "\033[0m"
 
 
-def heading(title):
-    print(f"\n{RED}--- {title} ---{RESET}")
+def clear():
+    os.system("clear" if os.name != "nt" else "cls")
 
 
 def pause():
-    input(f"\n{YELLOW}Tekan Enter untuk kembali...{RESET}")
+    input(f"\n{Y}Tekan Enter untuk kembali...{RESET}")
 
 
-def network_info():
-    heading("INFORMASI JARINGAN")
-    print("Hostname :", socket.gethostname())
-    print("Sistem   :", platform.system(), platform.release())
-    print("Python   :", platform.python_version())
-    print("Arsitektur:", platform.machine())
-    print("Termux   :", os.environ.get("PREFIX", "Tidak terdeteksi"))
+def banner():
+    print(f"{C}")
+    print(r"""
+ ____                 _
+|  _ \ ___ _ __   ___(_) __ _ _ __ ___   __ _
+| |_) / _ \ '_ \ / __| |/ _` | '_ ` _ \ / _` |
+|  _ <  __/ | | | (__| | (_| | | | | | | (_| |
+|_| \_\___|_| |_|\___|_|\__, |_| |_| |_|\__,_|
+                        |___/
+    """)
+    print(f"{W}        Ren.sigma Network Security Edition {VERSION}{RESET}")
 
+    # Opsional: tampilkan gambar GitHub jika Pillow tersedia.
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("192.0.2.1", 80))
-            print("IP lokal :", s.getsockname()[0])
-    except OSError as e:
-        print("IP lokal tidak terdeteksi:", e)
+        from io import BytesIO
+        from PIL import Image
+
+        req = urllib.request.Request(
+            IMAGE_URL, headers={"User-Agent": "RenSigma/2.0"}
+        )
+        with urllib.request.urlopen(req, timeout=4) as response:
+            image_data = response.read(2_000_000)
+
+        image = Image.open(BytesIO(image_data)).convert("RGB")
+        image.thumbnail((48, 20))
+        chars = " .:-=+*#%@"
+        pixels = list(image.getdata())
+        width, height = image.size
+
+        for y in range(height):
+            line = ""
+            for x in range(width):
+                rr, gg, bb = pixels[y * width + x]
+                brightness = int((rr * 0.299 + gg * 0.587 + bb * 0.114) / 256 * len(chars))
+                brightness = min(brightness, len(chars) - 1)
+                line += f"\033[38;2;{rr};{gg};{bb}m{chars[brightness]}{RESET}"
+            print(line)
+    except Exception:
+        pass
+
+    print(f"{C}" + "-" * 48 + RESET)
 
 
+def ask(prompt):
+    return input(f"{Y}{prompt}{RESET}").strip()
+
+
+def valid_domain(value):
+    value = value.strip()
+    if "://" in value:
+        value = urlparse(value).hostname or ""
+    value = value.rstrip(".")
+    if not value or len(value) > 253 or " " in value:
+        raise ValueError("Domain tidak valid.")
+    return value
+
+
+# 1. IP & Subnet Calculator
+def subnet_calculator():
+    print(f"\n{C}=== IP & SUBNET CALCULATOR ==={RESET}")
+    try:
+        network = ipaddress.ip_network(ask("IP/CIDR (contoh 192.168.1.10/24): "), strict=False)
+        print("Network       :", network.network_address)
+        print("Netmask       :", network.netmask)
+        print("Broadcast     :", network.broadcast_address)
+        print("Prefix        :", network.prefixlen)
+        print("Total alamat  :", network.num_addresses)
+        if network.version == 4:
+            print("Host usable   :", max(0, network.num_addresses - 2)
+                  if network.prefixlen < 31 else network.num_addresses)
+            print("Wildcard mask :", ipaddress.IPv4Address(int(network.hostmask)))
+    except ValueError as exc:
+        print(f"{R}Input tidak valid: {exc}{RESET}")
+
+
+# 2. DNS Lookup
 def dns_lookup():
-    heading("DNS LOOKUP")
-    host = input("Domain (contoh: example.com): ").strip()
-
-    if not host or "/" in host or " " in host:
-        print("Masukkan domain saja.")
-        return
-
+    print(f"\n{C}=== DNS LOOKUP ==={RESET}")
     try:
+        host = valid_domain(ask("Domain: "))
         results = socket.getaddrinfo(host, None)
-        addresses = sorted({item[4][0] for item in results})
+        addresses = sorted({result[4][0] for result in results})
         for address in addresses:
-            print(f"{GREEN}{address}{RESET}")
-    except socket.gaierror as e:
-        print(f"{RED}DNS lookup gagal: {e}{RESET}")
+            print(f"{G}{address}{RESET}")
+        if not addresses:
+            print("Tidak ada alamat ditemukan.")
+    except (ValueError, socket.gaierror, OSError) as exc:
+        print(f"{R}Lookup gagal: {exc}{RESET}")
 
 
-def port_checker():
-    heading("PORT CHECKER")
-    host = input("IP/hostname perangkat milikmu atau lab: ").strip()
-
+# 3. WHOIS Lookup (server WHOIS publik, koneksi baca saja)
+def whois_lookup():
+    print(f"\n{C}=== WHOIS LOOKUP ==={RESET}")
     try:
-        port = int(input("Port (1-65535): "))
-        if not host or not 1 <= port <= 65535:
-            raise ValueError
-    except ValueError:
-        print("Host atau nomor port tidak valid.")
-        return
+        domain = valid_domain(ask("Domain (contoh example.com): "))
+        if "." not in domain or domain.startswith("-"):
+            print("Masukkan nama domain yang valid.")
+            return
 
-    try:
-        with socket.create_connection((host, port), timeout=3):
-            print(f"{GREEN}Port {port} dapat dihubungi.{RESET}")
-    except (OSError, socket.timeout) as e:
-        print(f"{YELLOW}Port tidak dapat dihubungi: {e}{RESET}")
+        with socket.create_connection(("whois.iana.org", 43), timeout=6) as sock:
+            sock.sendall((domain + "\r\n").encode())
+            chunks = []
+            while True:
+                part = sock.recv(4096)
+                if not part:
+                    break
+                chunks.append(part)
+                if sum(map(len, chunks)) > 100_000:
+                    break
+
+        response = b"".join(chunks).decode("utf-8", errors="replace")
+        refer = re.search(r"(?im)^refer:\s*(\S+)", response)
+        server = refer.group(1) if refer else None
+
+        if server:
+            with socket.create_connection((server, 43), timeout=6) as sock:
+                sock.sendall((domain + "\r\n").encode())
+                chunks = []
+                total = 0
+                while total < 100_000:
+                    part = sock.recv(min(4096, 100_000 - total))
+                    if not part:
+                        break
+                    chunks.append(part)
+                    total += len(part)
+            response = b"".join(chunks).decode("utf-8", errors="replace")
+
+        print(response[:12000] or "Tidak ada data WHOIS.")
+    except (ValueError, OSError) as exc:
+        print(f"{R}WHOIS gagal: {exc}{RESET}")
 
 
-def connection_test():
-    heading("CONNECTION TEST")
-    host = input("Host milik sendiri/lab: ").strip()
-
-    if not host:
-        print("Host kosong.")
-        return
-
-    try:
-        port = int(input("Port (contoh 443): "))
-        if not 1 <= port <= 65535:
-            raise ValueError
-
-        start = datetime.now().timestamp()
-        with socket.create_connection((host, port), timeout=5):
-            elapsed = (datetime.now().timestamp() - start) * 1000
-
-        print(f"{GREEN}Koneksi berhasil: {elapsed:.1f} ms{RESET}")
-    except ValueError:
-        print("Nomor port tidak valid.")
-    except OSError as e:
-        print(f"{YELLOW}Koneksi gagal: {e}{RESET}")
-
-
-def http_security_check():
-    heading("HTTP SECURITY CHECK")
-    url = input("URL website milikmu/lab: ").strip()
-
-    if not url:
-        print("URL kosong.")
-        return
-
-    if not url.startswith(("https://", "http://")):
-        url = "https://" + url
-
-    if not urlparse(url).hostname:
-        print("Format URL tidak valid.")
-        return
+# Helper HTTP: hanya GET/OPTIONS/HEAD, tidak mengirim kredensial
+def http_request(url, method="GET"):
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("URL harus diawali http:// atau https://")
+    if parsed.username or parsed.password:
+        raise ValueError("Jangan masukkan kredensial ke dalam URL.")
 
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "RenSigma-NetworkAudit/1.0"}
+        method=method,
+        headers={"User-Agent": "RenSigma-Defensive-Audit/2.0"}
     )
-
     try:
         with urllib.request.urlopen(req, timeout=8) as response:
-            headers = response.headers
-            print("HTTP Status:", response.status)
-
-            checks = {
-                "Strict-Transport-Security": "HSTS",
-                "Content-Security-Policy": "CSP",
-                "X-Content-Type-Options": "MIME protection",
-                "X-Frame-Options": "Framing protection",
-                "Referrer-Policy": "Referrer policy",
-            }
-
-            for header, label in checks.items():
-                if header in headers:
-                    print(f"{GREEN}[ADA] {label}{RESET}")
-                else:
-                    print(f"{YELLOW}[PERLU DIPERIKSA] {label}{RESET}")
-
-    except urllib.error.HTTPError as e:
-        print("HTTP Status:", e.code, e.reason)
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        print(f"{RED}Pemeriksaan gagal: {e}{RESET}")
+            return response.status, response.headers, response.read(200_000)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.headers, exc.read(20_000)
 
 
-def ssl_tls_checker():
-    heading("SSL/TLS CERTIFICATE CHECK")
-    host = input("Hostname HTTPS milik sendiri/lab: ").strip()
-
-    if not host or "/" in host:
-        print("Masukkan hostname saja, contoh: example.com")
-        return
-
+# 4. HTTP Method Checker
+def http_method_checker():
+    print(f"\n{C}=== HTTP METHOD CHECKER ==={RESET}")
     try:
-        context = ssl.create_default_context()
-
-        with socket.create_connection((host, 443), timeout=5) as sock:
-            with context.wrap_socket(sock, server_hostname=host) as tls:
-                cert = tls.getpeercert()
-
-                print("TLS Version:", tls.version())
-                cipher = tls.cipher()
-                print("Cipher     :", cipher[0] if cipher else "Tidak diketahui")
-                print("Subject    :", cert.get("subject"))
-                print("Issuer     :", cert.get("issuer"))
-
-                expiry = cert.get("notAfter")
-                if expiry:
-                    expiry_dt = datetime.strptime(
-                        expiry, "%b %d %H:%M:%S %Y %Z"
-                    ).replace(tzinfo=timezone.utc)
-
-                    print("Kedaluwarsa:", expiry_dt.isoformat())
-                    if expiry_dt > datetime.now(timezone.utc):
-                        print(f"{GREEN}Sertifikat masih berlaku.{RESET}")
-                    else:
-                        print(f"{RED}Sertifikat kedaluwarsa.{RESET}")
-
-    except (ssl.SSLError, OSError, ValueError) as e:
-        print(f"{RED}Pemeriksaan TLS gagal: {e}{RESET}")
+        url = ask("URL milik sendiri/lab: ")
+        status, headers, _ = http_request(url, "OPTIONS")
+        print("HTTP status:", status)
+        allowed = headers.get("Allow")
+        if allowed:
+            print("Allow:", allowed)
+        else:
+            print("Server tidak mengirim header Allow.")
+            print("Hasil ini tidak membuktikan metode tertentu diizinkan atau ditolak.")
+    except (ValueError, OSError, urllib.error.URLError) as exc:
+        print(f"{R}Request gagal: {exc}{RESET}")
 
 
-def lan_discovery():
-    heading("LAN DISCOVERY")
-    print("Hanya gunakan pada jaringan lokal milik sendiri/lab.")
-
-    subnet = input("Subnet IPv4 (contoh 192.168.1.0/24): ").strip()
-
-    try:
-        network = ipaddress.ip_network(subnet, strict=False)
-
-        if not isinstance(network, ipaddress.IPv4Network):
-            print("Hanya mendukung IPv4.")
-            return
-
-        if network.num_addresses > 256:
-            print("Batasi subnet hingga maksimal 256 alamat.")
-            return
-
-    except ValueError:
-        print("Format subnet tidak valid.")
-        return
-
-    print(f"{CYAN}Memeriksa port TCP 80 pada {network}...{RESET}")
-    print("Perangkat tanpa port 80 terbuka mungkin tidak terdeteksi.")
-
-    found = 0
-
-    for ip in network.hosts():
-        try:
-            with socket.create_connection((str(ip), 80), timeout=0.15):
-                print(f"{GREEN}[HTTP aktif] {ip}{RESET}")
-                found += 1
-        except OSError:
-            pass
-
-    print(f"Pemeriksaan selesai. Respons ditemukan: {found}")
-
-
-def main_menu():
-    actions = {
-        "1": ("Informasi jaringan", network_info),
-        "2": ("DNS Lookup", dns_lookup),
-        "3": ("Port Checker", port_checker),
-        "4": ("Connection Test", connection_test),
-        "5": ("HTTP Security Check", http_security_check),
-        "6": ("SSL/TLS Checker", ssl_tls_checker),
-        "7": ("LAN Discovery", lan_discovery),
+# 5. Security Headers Analyzer
+def headers_analyzer():
+    print(f"\n{C}=== SECURITY HEADERS ANALYZER ==={RESET}")
+    checks = {
+        "Strict-Transport-Security": "Membantu menerapkan HTTPS",
+        "Content-Security-Policy": "Membatasi sumber konten",
+        "X-Content-Type-Options": "Mencegah MIME sniffing",
+        "X-Frame-Options": "Perlindungan framing lama",
+        "Referrer-Policy": "Mengatur informasi referrer",
+        "Permissions-Policy": "Mengatur akses fitur browser",
     }
+    try:
+        url = ask("URL situs milik sendiri/lab: ")
+        status, headers, _ = http_request(url, "GET")
+        print("HTTP status:", status)
+        for name, description in checks.items():
+            value = headers.get(name)
+            if value:
+                print(f"{G}[ADA]{RESET} {name}: {value}")
+            else:
+                print(f"{Y}[BELUM TERLIHAT]{RESET} {name} — {description}")
+        print("\nCatatan: hasil ini pemeriksaan awal, bukan bukti kerentanan.")
+    except (ValueError, OSError, urllib.error.URLError) as exc:
+        print(f"{R}Analisis gagal: {exc}{RESET}")
 
+
+# 6. TLS Certificate Inspector
+def certificate_inspector():
+    print(f"\n{C}=== CERTIFICATE INSPECTOR ==={RESET}")
+    try:
+        host = valid_domain(ask("Hostname HTTPS: "))
+        context = ssl.create_default_context()
+        with socket.create_connection((host, 443), timeout=7) as raw:
+            with context.wrap_socket(raw, server_hostname=host) as secure:
+                cert = secure.getpeercert()
+                print("TLS version :", secure.version())
+                print("Cipher      :", secure.cipher())
+                print("Subject     :", cert.get("subject"))
+                print("Issuer      :", cert.get("issuer"))
+                expiry = cert.get("notAfter")
+                print("Expires     :", expiry or "Tidak tersedia")
+                if expiry:
+                    expires_at = datetime.strptime(expiry, "%b %d %H:%M:%S %Y %Z")
+                    remaining = (expires_at - datetime.utcnow()).days
+                    print("Sisa hari   :", remaining)
+    except (ValueError, OSError, ssl.SSLError) as exc:
+        print(f"{R}Pemeriksaan gagal: {exc}{RESET}")
+
+
+# 7. Local Network Scanner — hanya subnet kecil yang diizinkan
+def local_network_scanner():
+    print(f"\n{C}=== LOCAL NETWORK SCANNER ==={RESET}")
+    print("Gunakan hanya pada jaringan milik sendiri atau lab berizin.")
+    try:
+        network = ipaddress.ip_network(ask("Subnet IPv4 (contoh 192.168.1.0/24): "), strict=False)
+        if network.version != 4 or network.num_addresses > 256:
+            print("Dibatasi ke subnet IPv4 dengan maksimal 256 alamat.")
+            return
+        port_text = ask("TCP port yang ingin diperiksa (contoh 80): ")
+        port = int(port_text)
+        if not 1 <= port <= 65535:
+            print("Port harus antara 1 dan 65535.")
+            return
+
+        found = 0
+        for ip in network.hosts():
+            try:
+                with socket.create_connection((str(ip), port), timeout=0.25):
+                    print(f"{G}[RESPON]{RESET} {ip}:{port}")
+                    found += 1
+            except OSError:
+                pass
+        print(f"Selesai. Perangkat merespons pada port {port}: {found}")
+        print("Perangkat yang tidak merespons port tersebut bisa saja tetap aktif.")
+    except (ValueError, OSError) as exc:
+        print(f"{R}Input/scan gagal: {exc}{RESET}")
+
+
+# 8. PCAP Analyzer — memakai Scapy bila sudah dipasang
+def pcap_analyzer():
+    print(f"\n{C}=== PCAP ANALYZER ==={RESET}")
+    path = ask("Lokasi file .pcap/.pcapng milik sendiri: ")
+    if not os.path.isfile(path):
+        print("File tidak ditemukan.")
+        return
+    if not path.lower().endswith((".pcap", ".pcapng")):
+        print("Pilih file .pcap atau .pcapng.")
+        return
+    try:
+        from scapy.utils import PcapReader
+        from collections import Counter
+        protocols = Counter()
+        sources = Counter()
+        destinations = Counter()
+        count = 0
+
+        with PcapReader(path) as reader:
+            for packet in reader:
+                count += 1
+                if packet.haslayer("IP"):
+                    ip = packet["IP"]
+                    sources[ip.src] += 1
+                    destinations[ip.dst] += 1
+                    if packet.haslayer("TCP"):
+                        protocols["TCP"] += 1
+                    elif packet.haslayer("UDP"):
+                        protocols["UDP"] += 1
+                    elif packet.haslayer("ICMP"):
+                        protocols["ICMP"] += 1
+                    else:
+                        protocols["IP lainnya"] += 1
+                elif packet.haslayer("IPv6"):
+                    protocols["IPv6"] += 1
+                else:
+                    protocols["Non-IP/lainnya"] += 1
+
+        print("Total paket:", count)
+        print("Protokol:", dict(protocols))
+        print("Top IP sumber:", sources.most_common(10))
+        print("Top IP tujuan:", destinations.most_common(10))
+    except ImportError:
+        print("Scapy belum terpasang.")
+        print("Coba: pip install scapy")
+    except Exception as exc:
+        print(f"{R}Gagal membaca PCAP: {exc}{RESET}")
+
+
+# 9. Log Analyzer
+def log_analyzer():
+    print(f"\n{C}=== LOG ANALYZER ==={RESET}")
+    path = ask("Lokasi file log teks milik sendiri: ")
+    if not os.path.isfile(path):
+        print("File tidak ditemukan.")
+        return
+
+    patterns = {
+        "failed": re.compile(r"failed|failure|invalid password|authentication error", re.I),
+        "denied": re.compile(r"denied|forbidden|blocked|unauthorized", re.I),
+        "error": re.compile(r"\berror\b|exception|critical", re.I),
+        "timeout": re.compile(r"timeout|timed out|connection reset", re.I),
+    }
+    totals = {name: 0 for name in patterns}
+    matches = []
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as file:
+            for line_number, line in enumerate(file, 1):
+                for name, pattern in patterns.items():
+                    if pattern.search(line):
+                        totals[name] += 1
+                        if len(matches) < 30:
+                            matches.append((line_number, name, line.strip()[:240]))
+                        break
+
+        print("Ringkasan:")
+        for name, total in totals.items():
+            print(f"  {name}: {total}")
+        print("\nContoh baris yang cocok:")
+        for number, category, line in matches:
+            print(f"[baris {number}] [{category}] {line}")
+        print("\nPola ini hanya indikator awal; periksa konteks sebelum menyimpulkan.")
+    except OSError as exc:
+        print(f"{R}Gagal membaca log: {exc}{RESET}")
+
+
+# 10. SHA-256 File Integrity Checker
+def hash_checker():
+    print(f"\n{C}=== SHA-256 HASH CHECKER ==={RESET}")
+    path = ask("Lokasi file: ")
+    if not os.path.isfile(path):
+        print("File tidak ditemukan.")
+        return
+
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        print("SHA-256:", actual)
+
+        expected = ask("SHA-256 pembanding (kosongkan untuk melewati): ").lower()
+        if expected:
+            if re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+                print("Format SHA-256 harus terdiri dari 64 karakter heksadesimal.")
+            elif actual == expected:
+                print(f"{G}HASH COCOK{RESET}")
+            else:
+                print(f"{R}HASH BERBEDA{RESET}")
+    except OSError as exc:
+        print(f"{R}Gagal membaca file: {exc}{RESET}")
+
+
+# 11. Password Strength Auditor — lokal, tanpa koneksi internet
+def password_auditor():
+    print(f"\n{C}=== PASSWORD STRENGTH AUDITOR ==={RESET}")
+    print("Pemeriksaan dilakukan lokal. Jangan gunakan kata sandi asli.")
+    password = ask("Masukkan kata sandi contoh: ")
+    if not password:
+        print("Input kosong.")
+        return
+
+    score = 0
+    score += 1 if len(password) >= 12 else 0
+    score += 1 if len(password) >= 16 else 0
+    score += 1 if re.search(r"[a-z]", password) else 0
+    score += 1 if re.search(r"[A-Z]", password) else 0
+    score += 1 if re.search(r"\d", password) else 0
+    score += 1 if re.search(r"[^A-Za-z0-9]", password) else 0
+
+    if password.lower() in {"password", "password123", "admin", "qwerty123"}:
+        score = 0
+
+    if score <= 2:
+        rating = "Lemah"
+    elif score <= 4:
+        rating = "Sedang"
+    else:
+        rating = "Lebih kuat"
+
+    print("Panjang:", len(password))
+    print("Skor indikator:", score, "/ 6")
+    print("Penilaian sederhana:", rating)
+    print("Gunakan kata sandi unik dan panjang; aktifkan MFA jika tersedia.")
+    print("Ini bukan pengukuran entropi atau jaminan keamanan.")
+
+
+# 12. Network Information
+def network_info():
+    print(f"\n{C}=== NETWORK / SYSTEM INFO ==={RESET}")
+    print("Hostname :", socket.gethostname())
+    print("OS       :", platform.system(), platform.release())
+    print("Python   :", platform.python_version())
+    print("Arsitektur:", platform.machine())
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 80))
+            print("IP lokal :", sock.getsockname()[0])
+    except OSError:
+        print("IP lokal : tidak dapat ditentukan")
+
+
+def main():
     while True:
-        print(f"\n{CYAN}╔══════════════════════════════════╗")
-        print("║       REN.SIGMA CYBER TOOLS      ║")
-        print("╚══════════════════════════════════╝" + RESET)
+        clear()
+        banner()
+        print(f"""
+{W}[1]{RESET} IP & Subnet Calculator
+{W}[2]{RESET} DNS Lookup
+{W}[3]{RESET} WHOIS Lookup
+{W}[4]{RESET} HTTP Method Checker
+{W}[5]{RESET} Security Headers Analyzer
+{W}[6]{RESET} TLS Certificate Inspector
+{W}[7]{RESET} Local Network Scanner
+{W}[8]{RESET} PCAP Analyzer
+{W}[9]{RESET} Log Analyzer
+{W}[10]{RESET} SHA-256 Hash Checker
+{W}[11]{RESET} Password Strength Auditor
+{W}[12]{RESET} Network / System Info
+{R}[0]{RESET} Keluar
+""")
+        choice = ask("Ren.sigma > ")
 
-        for number, (name, _) in actions.items():
-            print(f"[{number}] {name}")
-
-        print("[0] Keluar")
-        choice = input(f"\n{YELLOW}Pilih menu: {RESET}").strip()
+        actions = {
+            "1": subnet_calculator,
+            "2": dns_lookup,
+            "3": whois_lookup,
+            "4": http_method_checker,
+            "5": headers_analyzer,
+            "6": certificate_inspector,
+            "7": local_network_scanner,
+            "8": pcap_analyzer,
+            "9": log_analyzer,
+            "10": hash_checker,
+            "11": password_auditor,
+            "12": network_info,
+        }
 
         if choice == "0":
-            print(f"{GREEN}Ren.sigma ditutup. Sampai jumpa!{RESET}")
+            print(f"{G}Ren.sigma ditutup. Sampai jumpa!{RESET}")
             break
-
-        if choice not in actions:
-            print(f"{RED}Pilihan tidak tersedia.{RESET}")
-            continue
-
-        try:
-            actions[choice][1]()
-        except (KeyboardInterrupt, EOFError):
-            print("\nKembali ke menu.")
-
-        pause()
+        action = actions.get(choice)
+        if action:
+            try:
+                action()
+            except KeyboardInterrupt:
+                print("\nDibatalkan.")
+            except Exception as exc:
+                print(f"{R}Terjadi kesalahan: {exc}{RESET}")
+            pause()
+        else:
+            print(f"{R}Pilihan tidak valid.{RESET}")
+            pause()
 
 
 if __name__ == "__main__":
     try:
-        main_menu()
-    except (KeyboardInterrupt, EOFError):
-        print("\nRen.sigma ditutup.")
+        main()
+    except KeyboardInterrupt:
+        print("\nKeluar.")
+
