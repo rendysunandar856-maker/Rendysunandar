@@ -1,14 +1,29 @@
+
 from PIL import Image, ImageOps, ImageEnhance
 import os
 import shutil
+import urllib.request
+from io import BytesIO
+import sys
+import socket
+import platform
+import subprocess
 
-path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anime_baru.jpg")
+# === AMBIL GAMBAR LANGSUNG DARI GITHUB ===
+IMAGE_URL = "https://raw.githubusercontent.com/rendysunandar856-maker/Rendysunandar/main/anime_baru.jpg"
 chars = "@%#*+=-:. "
 
-with Image.open(path) as source:
-    img = ImageOps.exif_transpose(source).convert("RGB")
+try:
+    with urllib.request.urlopen(IMAGE_URL, timeout=15) as response:
+        image_data = response.read()
 
-# Gunakan lebar terminal, dengan batas agar gambar tidak berlebihan
+    with Image.open(BytesIO(image_data)) as source:
+        img = ImageOps.exif_transpose(source).convert("RGB")
+except Exception as e:
+    print("Gagal mengambil gambar dari GitHub:", e)
+    sys.exit(1)
+
+# === UKURAN GAMBAR ===
 cols = shutil.get_terminal_size((80, 24)).columns
 width = min(max(cols - 2, 60), 100)
 height = max(1, int(img.height / img.width * width * 0.48))
@@ -21,7 +36,6 @@ gray = ImageOps.autocontrast(ImageOps.grayscale(img), cutoff=1)
 rgb = list(img.getdata())
 levels = list(gray.getdata())
 
-
 C = "\033[96m"
 B = "\033[1;96m"
 D = "\033[34m"
@@ -29,19 +43,20 @@ R = "\033[0m"
 
 print()
 
-
-
-import subprocess
-
 RED = "\033[91m"
 RESET = "\033[0m"
 
-print()
-result = subprocess.run(
-    ["figlet", "-f", "slant", "Rendy Sunandar"],
-    capture_output=True, text=True
-)
-print(RED + result.stdout.rstrip() + RESET)
+# === BANNER ===
+try:
+    result = subprocess.run(
+        ["figlet", "-f", "slant", "Rendy Sunandar"],
+        capture_output=True, text=True, timeout=3
+    )
+    banner = result.stdout.rstrip() if result.returncode == 0 else "Rendy Sunandar"
+except (FileNotFoundError, subprocess.SubprocessError):
+    banner = "Rendy Sunandar"
+
+print(RED + banner + RESET)
 print(RED + "       KELAS 11 TKJ" + RESET)
 print(RED + "  ┌──────────────────────────────┐" + RESET)
 print(RED + "  │  SYSTEM  : TERMUX ANDROID     │" + RESET)
@@ -51,6 +66,7 @@ print(RED + "  │  SKILL   : NETWORKING         │" + RESET)
 print(RED + "  └──────────────────────────────┘" + RESET)
 print()
 
+# === CETAK GAMBAR ASCII BERWARNA ===
 for y in range(height):
     line = []
     for x in range(width):
@@ -62,18 +78,13 @@ for y in range(height):
         if v > 242:
             line.append(" ")
         else:
-            line.append(f"\033[38;2;{r};{g};{b}m{chars[index]}\033[0m")
+            line.append(
+                f"\033[38;2;{r};{g};{b}m{chars[index]}\033[0m"
+            )
 
     print("".join(line))
 
 # === MENU INTERAKTIF RENDY SUNANDAR ===
-import os
-import sys
-import socket
-import platform
-import subprocess
-import urllib.request
-
 MERAH = "\033[91m"
 RESET = "\033[0m"
 
@@ -193,3 +204,5 @@ try:
     menu()
 except (KeyboardInterrupt, EOFError):
     print("\nMenu ditutup.")
+    
+
