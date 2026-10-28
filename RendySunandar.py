@@ -242,7 +242,6 @@ def cybersecurity_tools():
                 else:
                     print("Format .7z memerlukan modul py7zr atau 7z command line tool.")
                     print("Mencoba menggunakan 7z command line tool...")
-                    import subprocess
                     for pwd in passwords:
                         try:
                             result = subprocess.run(
@@ -252,21 +251,4 @@ def cybersecurity_tools():
                                 timeout=2
                             )
                             if "No errors" in result.stderr.decode() or result.returncode == 0:
-                                print(f"Password ditemukan: {pwd}")
-                                found = True
-                                break
-                        except Exception:
-                            continue
-
-                if not found:
-                    print("Password tidak ditemukan dalam wordlist.")
-            except Exception as e:
-                print("Gagal melakukan crack:", e)
-
-        elif pilih == "7":
-            path = input("Lokasi file log: ").strip()
-            try:
-                with open(path, encoding="utf-8", errors="replace") as f:
-                    lines = f.readlines()
-                print("Total baris:", len(lines))
-                for
+                                print(f"Password ditemukan: {
