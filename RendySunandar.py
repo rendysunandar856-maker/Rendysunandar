@@ -1,205 +1,264 @@
-from PIL import Image, ImageOps, ImageEnhance
-import os
-import shutil
-import urllib.request
-from io import BytesIO
-import sys
+
 import socket
+import ssl
+import urllib.request
+import urllib.error
 import platform
-import subprocess
-
-# === AMBIL GAMBAR LANGSUNG DARI GITHUB ===
-IMAGE_URL = "https://raw.githubusercontent.com/rendysunandar856-maker/Rendysunandar/main/anime_baru.jpg"
-chars = "@%#*+=-:. "
-
-try:
-    with urllib.request.urlopen(IMAGE_URL, timeout=15) as response:
-        image_data = response.read()
-
-    with Image.open(BytesIO(image_data)) as source:
-        img = ImageOps.exif_transpose(source).convert("RGB")
-except Exception as e:
-    print("Gagal mengambil gambar dari GitHub:", e)
-    sys.exit(1)
-
-# === UKURAN GAMBAR ===
-cols = shutil.get_terminal_size((80, 24)).columns
-width = min(max(cols - 2, 60), 100)
-height = max(1, int(img.height / img.width * width * 0.48))
-
-img = img.resize((width, height), Image.Resampling.LANCZOS)
-img = ImageEnhance.Contrast(img).enhance(1.4)
-img = ImageEnhance.Color(img).enhance(1.2)
-
-gray = ImageOps.autocontrast(ImageOps.grayscale(img), cutoff=1)
-rgb = list(img.getdata())
-levels = list(gray.getdata())
-
-C = "\033[96m"
-B = "\033[1;96m"
-D = "\033[34m"
-R = "\033[0m"
-
-print()
+import os
+import ipaddress
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
 RESET = "\033[0m"
 
-# === BANNER ===
-try:
-    result = subprocess.run(
-        ["figlet", "-f", "slant", "Rendy Sunandar"],
-        capture_output=True, text=True, timeout=3
+
+def heading(title):
+    print(f"\n{RED}--- {title} ---{RESET}")
+
+
+def pause():
+    input(f"\n{YELLOW}Tekan Enter untuk kembali...{RESET}")
+
+
+def network_info():
+    heading("INFORMASI JARINGAN")
+    print("Hostname :", socket.gethostname())
+    print("Sistem   :", platform.system(), platform.release())
+    print("Python   :", platform.python_version())
+    print("Arsitektur:", platform.machine())
+    print("Termux   :", os.environ.get("PREFIX", "Tidak terdeteksi"))
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 80))
+            print("IP lokal :", s.getsockname()[0])
+    except OSError as e:
+        print("IP lokal tidak terdeteksi:", e)
+
+
+def dns_lookup():
+    heading("DNS LOOKUP")
+    host = input("Domain (contoh: example.com): ").strip()
+
+    if not host or "/" in host or " " in host:
+        print("Masukkan domain saja.")
+        return
+
+    try:
+        results = socket.getaddrinfo(host, None)
+        addresses = sorted({item[4][0] for item in results})
+        for address in addresses:
+            print(f"{GREEN}{address}{RESET}")
+    except socket.gaierror as e:
+        print(f"{RED}DNS lookup gagal: {e}{RESET}")
+
+
+def port_checker():
+    heading("PORT CHECKER")
+    host = input("IP/hostname perangkat milikmu atau lab: ").strip()
+
+    try:
+        port = int(input("Port (1-65535): "))
+        if not host or not 1 <= port <= 65535:
+            raise ValueError
+    except ValueError:
+        print("Host atau nomor port tidak valid.")
+        return
+
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            print(f"{GREEN}Port {port} dapat dihubungi.{RESET}")
+    except (OSError, socket.timeout) as e:
+        print(f"{YELLOW}Port tidak dapat dihubungi: {e}{RESET}")
+
+
+def connection_test():
+    heading("CONNECTION TEST")
+    host = input("Host milik sendiri/lab: ").strip()
+
+    if not host:
+        print("Host kosong.")
+        return
+
+    try:
+        port = int(input("Port (contoh 443): "))
+        if not 1 <= port <= 65535:
+            raise ValueError
+
+        start = datetime.now().timestamp()
+        with socket.create_connection((host, port), timeout=5):
+            elapsed = (datetime.now().timestamp() - start) * 1000
+
+        print(f"{GREEN}Koneksi berhasil: {elapsed:.1f} ms{RESET}")
+    except ValueError:
+        print("Nomor port tidak valid.")
+    except OSError as e:
+        print(f"{YELLOW}Koneksi gagal: {e}{RESET}")
+
+
+def http_security_check():
+    heading("HTTP SECURITY CHECK")
+    url = input("URL website milikmu/lab: ").strip()
+
+    if not url:
+        print("URL kosong.")
+        return
+
+    if not url.startswith(("https://", "http://")):
+        url = "https://" + url
+
+    if not urlparse(url).hostname:
+        print("Format URL tidak valid.")
+        return
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "RenSigma-NetworkAudit/1.0"}
     )
-    banner = result.stdout.rstrip() if result.returncode == 0 else "Rendy Sunandar"
-except (FileNotFoundError, subprocess.SubprocessError):
-    banner = "Rendy Sunandar"
-
-print(RED + banner + RESET)
-print(RED + "       KELAS 11 TKJ" + RESET)
-print(RED + "  ┌──────────────────────────────┐" + RESET)
-print(RED + "  │  SYSTEM  : TERMUX ANDROID     │" + RESET)
-print(RED + "  │  STATUS  : ONLINE             │" + RESET)
-print(RED + "  │  NETWORK : READY              │" + RESET)
-print(RED + "  │  SKILL   : NETWORKING         │" + RESET)
-print(RED + "  └──────────────────────────────┘" + RESET)
-print()
-
-# === CETAK GAMBAR ASCII BERWARNA ===
-for y in range(height):
-    line = []
-    for x in range(width):
-        i = y * width + x
-        r, g, b = rgb[i]
-        v = levels[i]
-        index = min(v * len(chars) // 256, len(chars) - 1)
-
-        if v > 242:
-            line.append(" ")
-        else:
-            line.append(
-                f"\033[38;2;{r};{g};{b}m{chars[index]}\033[0m"
-            )
-
-    print("".join(line))
-
-# === MENU INTERAKTIF RENDY SUNANDAR ===
-MERAH = "\033[91m"
-RESET = "\033[0m"
-
-def judul():
-    merah = "\033[91m"
-    oranye = "\033[38;5;208m"
-    reset = "\033[0m"
 
     try:
-        r = subprocess.run(
-            ["figlet", "-f", "big", "RENDY"],
-            capture_output=True, text=True, timeout=3
-        )
-        atas = r.stdout.rstrip() if r.returncode == 0 else "RENDY"
-    except (FileNotFoundError, subprocess.SubprocessError):
-        atas = "RENDY"
+        with urllib.request.urlopen(req, timeout=8) as response:
+            headers = response.headers
+            print("HTTP Status:", response.status)
+
+            checks = {
+                "Strict-Transport-Security": "HSTS",
+                "Content-Security-Policy": "CSP",
+                "X-Content-Type-Options": "MIME protection",
+                "X-Frame-Options": "Framing protection",
+                "Referrer-Policy": "Referrer policy",
+            }
+
+            for header, label in checks.items():
+                if header in headers:
+                    print(f"{GREEN}[ADA] {label}{RESET}")
+                else:
+                    print(f"{YELLOW}[PERLU DIPERIKSA] {label}{RESET}")
+
+    except urllib.error.HTTPError as e:
+        print("HTTP Status:", e.code, e.reason)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"{RED}Pemeriksaan gagal: {e}{RESET}")
+
+
+def ssl_tls_checker():
+    heading("SSL/TLS CERTIFICATE CHECK")
+    host = input("Hostname HTTPS milik sendiri/lab: ").strip()
+
+    if not host or "/" in host:
+        print("Masukkan hostname saja, contoh: example.com")
+        return
 
     try:
-        r = subprocess.run(
-            ["figlet", "-f", "big", "SUNANDAR"],
-            capture_output=True, text=True, timeout=3
-        )
-        bawah = r.stdout.rstrip() if r.returncode == 0 else "SUNANDAR"
-    except (FileNotFoundError, subprocess.SubprocessError):
-        bawah = "SUNANDAR"
+        context = ssl.create_default_context()
 
-    print()
-    print(oranye + atas + reset)
-    print(merah + bawah + reset)
-    print(oranye + "================================" + reset)
-    print(merah + "           MENU UTAMA" + reset)
-    print(oranye + "================================" + reset)
+        with socket.create_connection((host, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=host) as tls:
+                cert = tls.getpeercert()
 
-def menu():
+                print("TLS Version:", tls.version())
+                cipher = tls.cipher()
+                print("Cipher     :", cipher[0] if cipher else "Tidak diketahui")
+                print("Subject    :", cert.get("subject"))
+                print("Issuer     :", cert.get("issuer"))
+
+                expiry = cert.get("notAfter")
+                if expiry:
+                    expiry_dt = datetime.strptime(
+                        expiry, "%b %d %H:%M:%S %Y %Z"
+                    ).replace(tzinfo=timezone.utc)
+
+                    print("Kedaluwarsa:", expiry_dt.isoformat())
+                    if expiry_dt > datetime.now(timezone.utc):
+                        print(f"{GREEN}Sertifikat masih berlaku.{RESET}")
+                    else:
+                        print(f"{RED}Sertifikat kedaluwarsa.{RESET}")
+
+    except (ssl.SSLError, OSError, ValueError) as e:
+        print(f"{RED}Pemeriksaan TLS gagal: {e}{RESET}")
+
+
+def lan_discovery():
+    heading("LAN DISCOVERY")
+    print("Hanya gunakan pada jaringan lokal milik sendiri/lab.")
+
+    subnet = input("Subnet IPv4 (contoh 192.168.1.0/24): ").strip()
+
+    try:
+        network = ipaddress.ip_network(subnet, strict=False)
+
+        if not isinstance(network, ipaddress.IPv4Network):
+            print("Hanya mendukung IPv4.")
+            return
+
+        if network.num_addresses > 256:
+            print("Batasi subnet hingga maksimal 256 alamat.")
+            return
+
+    except ValueError:
+        print("Format subnet tidak valid.")
+        return
+
+    print(f"{CYAN}Memeriksa port TCP 80 pada {network}...{RESET}")
+    print("Perangkat tanpa port 80 terbuka mungkin tidak terdeteksi.")
+
+    found = 0
+
+    for ip in network.hosts():
+        try:
+            with socket.create_connection((str(ip), 80), timeout=0.15):
+                print(f"{GREEN}[HTTP aktif] {ip}{RESET}")
+                found += 1
+        except OSError:
+            pass
+
+    print(f"Pemeriksaan selesai. Respons ditemukan: {found}")
+
+
+def main_menu():
+    actions = {
+        "1": ("Informasi jaringan", network_info),
+        "2": ("DNS Lookup", dns_lookup),
+        "3": ("Port Checker", port_checker),
+        "4": ("Connection Test", connection_test),
+        "5": ("HTTP Security Check", http_security_check),
+        "6": ("SSL/TLS Checker", ssl_tls_checker),
+        "7": ("LAN Discovery", lan_discovery),
+    }
+
     while True:
-        judul()
-        print("\033[38;5;208m[1] INFORMASI SISTEM ANDROID/TERMUX\033[0m")
-        print("\033[91m[2] CEK KONEKSI INTERNET\033[0m")
-        print("\033[38;5;208m[3] INFORMASI JARINGAN DAN IP\033[0m")
-        print("\033[91m[4] TOOLS PYTHON\033[0m")
-        print("\033[38;5;208m[5] PROFIL RENDY SUNANDAR\033[0m")
-        print("\033[91m[0] KELUAR DARI MENU\033[0m")
-        print("================================" + RESET)
+        print(f"\n{CYAN}╔══════════════════════════════════╗")
+        print("║       REN.SIGMA CYBER TOOLS      ║")
+        print("╚══════════════════════════════════╝" + RESET)
 
-        pilihan = input("Pilih menu: ").strip()
+        for number, (name, _) in actions.items():
+            print(f"[{number}] {name}")
 
-        if pilihan == "1":
-            print(MERAH + "\n--- INFORMASI SISTEM ---")
-            print("Sistem :", platform.system())
-            print("Versi  :", platform.release())
-            print("Python :", platform.python_version())
-            print("Mesin  :", platform.machine())
-            print("Termux :", os.environ.get("PREFIX", "Tidak terdeteksi"))
-            print(RESET)
+        print("[0] Keluar")
+        choice = input(f"\n{YELLOW}Pilih menu: {RESET}").strip()
 
-        elif pilihan == "2":
-            print(MERAH + "\nMemeriksa koneksi internet...")
-            try:
-                req = urllib.request.Request(
-                    "https://www.google.com",
-                    method="HEAD",
-                    headers={"User-Agent": "TermuxMenu/1.0"}
-                )
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    print("Internet: TERHUBUNG")
-                    print("HTTP status:", response.status)
-            except Exception:
-                print("Internet tidak terjangkau atau pemeriksaan gagal.")
-                print("Periksa Wi-Fi/data seluler kamu.")
-            print(RESET)
-
-        elif pilihan == "3":
-            print(MERAH + "\n--- INFORMASI JARINGAN ---")
-            try:
-                host = socket.gethostname()
-                ip = socket.gethostbyname(host)
-                print("Hostname :", host)
-                print("IP lokal :", ip)
-                print("Catatan  : IP bisa berupa alamat loopback.")
-            except OSError as e:
-                print("Tidak dapat membaca informasi jaringan:", e)
-            print(RESET)
-
-        elif pilihan == "4":
-            print(MERAH + "\n--- TOOLS PYTHON ---")
-            print("1. Versi Python")
-            print("2. Versi pip")
-            sub = input("Pilih tools (1/2): ").strip()
-
-            if sub == "1":
-                print(sys.version)
-            elif sub == "2":
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "--version"]
-                )
-            else:
-                print("Pilihan tidak tersedia.")
-            print(RESET)
-
-        elif pilihan == "5":
-            print(MERAH + "\n--- PROFIL ---")
-            print("Nama     : Rendy Sunandar")
-            print("Lingkup  : Android dan Termux")
-            print("Minat    : Python dan networking")
-            print(RESET)
-
-        elif pilihan == "0":
-            print(MERAH + "Keluar dari menu. Sampai jumpa!" + RESET)
+        if choice == "0":
+            print(f"{GREEN}Ren.sigma ditutup. Sampai jumpa!{RESET}")
             break
 
-        else:
-            print(MERAH + "Pilihan tidak tersedia." + RESET)
+        if choice not in actions:
+            print(f"{RED}Pilihan tidak tersedia.{RESET}")
+            continue
 
-        input("\nTekan Enter untuk kembali ke menu...")
+        try:
+            actions[choice][1]()
+        except (KeyboardInterrupt, EOFError):
+            print("\nKembali ke menu.")
 
-try:
-    menu()
-except (KeyboardInterrupt, EOFError):
-    print("\nMenu ditutup.")
+        pause()
+
+
+if __name__ == "__main__":
+    try:
+        main_menu()
+    except (KeyboardInterrupt, EOFError):
+        print("\nRen.sigma ditutup.")
