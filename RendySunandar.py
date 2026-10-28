@@ -1,4 +1,3 @@
-
 from PIL import Image, ImageOps, ImageEnhance
 import os
 import shutil
@@ -12,6 +11,9 @@ import ssl
 import hashlib
 import ipaddress
 from urllib.parse import urlparse
+import zipfile
+import itertools
+import string
 
 # === AMBIL GAMBAR DARI GITHUB ===
 IMAGE_URL = "https://raw.githubusercontent.com/rendysunandar856-maker/Rendysunandar/main/anime_baru.jpg"
@@ -116,6 +118,132 @@ def judul():
     print(oranye + "================================" + reset)
 
 
+# === FUNGSI EKSTRAK ===
+def extract_archive():
+    path = input("Masukkan path file archive (.zip atau .7z): ").strip()
+    out_dir = input("Folder tujuan ekstrak (kosongkan untuk folder sama): ").strip()
+    
+    if not out_dir:
+        out_dir = os.path.dirname(path) if os.path.dirname(path) else "."
+    
+    if path.endswith(".zip"):
+        try:
+            with zipfile.ZipFile(path, 'r') as zip_ref:
+                zip_ref.extractall(out_dir)
+            print(MERAH + f"[+] Ekstrak ZIP berhasil ke: {out_dir}" + RESET)
+        except Exception as e:
+            print(f"Gagal ekstrak zip: {e}")
+    
+    elif path.endswith(".7z"):
+        try:
+            result = subprocess.run(
+                ["7z", "x", f"-o{out_dir}/", path, "-y"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                print(MERAH + f"[+] Ekstrak 7Z berhasil ke: {out_dir}" + RESET)
+            else:
+                print(f"Gagal ekstrak 7z: {result.stderr}")
+        except FileNotFoundError:
+            print("Perintah '7z' tidak ditemukan. Install dulu: pkg install p7zip")
+        except Exception as e:
+            print(f"Gagal ekstrak 7z: {e}")
+    else:
+        print("Format file tidak didukung (hanya .zip dan .7z).")
+
+
+# === FUNGSI CRACK PASSWORD ===
+def crack_archive():
+    print("\n" + MERAH + "=== CRACK PASSWORD ARCHIVE ===" + RESET)
+    print("[1] Crack .ZIP (Brute-force/Dict)")
+    print("[2] Crack .7Z (Menggunakan p7zip)")
+    print("[0] Kembali")
+    
+    mode = input("Pilih mode (1/2/0): ").strip()
+    
+    if mode == "1":
+        path = input("Masukkan path file .zip: ").strip()
+        method = input("Gunakan file kata sandi (dic) atau brute-force angka? (dic/brute): ").strip().lower()
+        
+        if method == "dic":
+            dic_path = input("Masukkan path file dictionary: ").strip()
+            try:
+                with open(dic_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    words = [line.strip() for line in f]
+            except Exception as e:
+                print(f"Gagal membaca dictionary: {e}")
+                return
+
+            found = False
+            print("Memulai pencarian...")
+            for pwd in words:
+                try:
+                    with zipfile.ZipFile(path, 'r') as zf:
+                        zf.extractall(pwd=pwd.encode('utf-8'))
+                    print(MERAH + f"\n[+] PASSWORD DITEMUKAN: {pwd}" + RESET)
+                    found = True
+                    break
+                except (RuntimeError, Exception):
+                    continue
+            
+            if not found:
+                print("Password tidak ditemukan dalam dictionary.")
+
+        elif method == "brute":
+            print("Memulai brute-force angka 4 digit (0000-9999)...")
+            chars = string.digits
+            found = False
+            
+            for attempt in itertools.product(chars, repeat=4):
+                pwd = "".join(attempt)
+                try:
+                    with zipfile.ZipFile(path, 'r') as zf:
+                        zf.extractall(pwd=pwd.encode('utf-8'))
+                    print(MERAH + f"\n[+] PASSWORD DITEMUKAN: {pwd}" + RESET)
+                    found = True
+                    break
+                except (RuntimeError, Exception):
+                    continue
+            
+            if not found:
+                print("Password tidak ditemukan dalam range 4 digit.")
+
+        else:
+            print("Pilihan metode tidak valid.")
+
+    elif mode == "2":
+        path = input("Masukkan path file .7z: ").strip()
+        dic_path = input("Masukkan path file dictionary: ").strip()
+        
+        try:
+            with open(dic_path, 'r', encoding='utf-8', errors='ignore') as f:
+                words = [line.strip() for line in f]
+            
+            print("Mulai crack .7z...")
+            found = False
+            for pwd in words:
+                cmd = ["7z", "t", f"-p{pwd}", path, "-y"]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                
+                if result.returncode == 0:
+                    print(MERAH + f"\n[+] PASSWORD DITEMUKAN: {pwd}" + RESET)
+                    found = True
+                    break
+            
+            if not found:
+                print("Password tidak ditemukan dalam dictionary.")
+                
+        except FileNotFoundError:
+            print("Perintah '7z' tidak ditemukan. Install dulu: pkg install p7zip")
+        except Exception as e:
+            print(f"Error saat crack: {e}")
+
+    elif mode == "0":
+        return
+    else:
+        print("Pilihan tidak valid.")
+
+
 # === CYBERSECURITY TOOLS ===
 def cybersecurity_tools():
     while True:
@@ -128,214 +256,6 @@ def cybersecurity_tools():
         print("[6] Hitung SHA-256 file")
         print("[7] Analisis log lokal")
         print("[8] Informasi lingkungan Python")
-        print("[0] Kembali ke menu utama")
-
-        pilih = input("Pilih tools: ").strip()
-
-        if pilih == "1":
-            try:
-                data = input("IP/CIDR (contoh 192.168.1.0/24): ").strip()
-                net = ipaddress.ip_network(data, strict=False)
-                print("Network :", net.network_address)
-                print("Netmask :", net.netmask)
-                print("Broadcast:", net.broadcast_address)
-                print("Jumlah alamat:", net.num_addresses)
-            except ValueError as e:
-                print("Input tidak valid:", e)
-
-        elif pilih == "2":
-            host = input("Domain: ").strip()
-            if not host or "/" in host or " " in host:
-                print("Domain tidak valid.")
-                continue
-            try:
-                hasil = socket.getaddrinfo(host, None)
-                for ip in sorted({x[4][0] for x in hasil}):
-                    print("IP:", ip)
-            except (socket.gaierror, OSError) as e:
-                print("DNS gagal:", e)
-
-        elif pilih == "3":
-            url = input("URL situs milikmu/lab: ").strip()
-            if "://" not in url:
-                url = "https://" + url
-            parsed = urlparse(url)
-
-            if parsed.scheme not in ("http", "https") or not parsed.hostname:
-                print("URL tidak valid.")
-                continue
-
-            try:
-                req = urllib.request.Request(
-                    url, headers={"User-Agent": "RendySigma/1.0"}
-                )
-                with urllib.request.urlopen(req, timeout=8) as r:
-                    print("HTTP status:", r.status)
-                    for nama in (
-                        "Strict-Transport-Security",
-                        "Content-Security-Policy",
-                        "X-Content-Type-Options",
-                        "X-Frame-Options",
-                        "Referrer-Policy",
-                    ):
-                        print(nama + ":", r.headers.get(nama, "Tidak ditemukan"))
-            except Exception as e:
-                print("Pemeriksaan gagal:", e)
-
-        elif pilih == "4":
-            host = input("Domain (tanpa https://): ").strip()
-            if not host or "/" in host or " " in host:
-                print("Domain tidak valid.")
-                continue
-            try:
-                context = ssl.create_default_context()
-                with socket.create_connection((host, 443), timeout=5) as sock:
-                    with context.wrap_socket(sock, server_hostname=host) as tls:
-                        cert = tls.getpeercert()
-                        print("Versi TLS:", tls.version())
-                        print("Subjek:", cert.get("subject"))
-                        print("Penerbit:", cert.get("issuer"))
-                        print("Berlaku sampai:", cert.get("notAfter"))
-            except Exception as e:
-                print("Pemeriksaan TLS gagal:", e)
-
-        elif pilih == "5":
-            print("Gunakan hanya perangkat sendiri atau lab yang berizin.")
-            host = input("IP/domain lab: ").strip()
-            try:
-                port = int(input("Port TCP (1-65535): ").strip())
-                if not host or "/" in host or " " in host:
-                    raise ValueError("Host tidak valid")
-                if not 1 <= port <= 65535:
-                    raise ValueError("Port harus 1 sampai 65535")
-
-                with socket.create_connection((host, port), timeout=3):
-                    print(f"Port {port}/TCP dapat dihubungi.")
-            except (ValueError, OSError) as e:
-                print("Koneksi gagal:", e)
-
-        elif pilih == "6":
-            path = input("Lokasi file: ").strip()
-            try:
-                sha = hashlib.sha256()
-                with open(path, "rb") as f:
-                    for bagian in iter(lambda: f.read(65536), b""):
-                        sha.update(bagian)
-                print("SHA-256:", sha.hexdigest())
-            except OSError as e:
-                print("File gagal dibaca:", e)
-
-        elif pilih == "7":
-            path = input("Lokasi file log: ").strip()
-            try:
-                with open(path, encoding="utf-8", errors="replace") as f:
-                    lines = f.readlines()
-                print("Total baris:", len(lines))
-                for kata in ("error", "failed", "denied", "warning"):
-                    jumlah = sum(kata in baris.lower() for baris in lines)
-                    print(kata + ":", jumlah)
-            except OSError as e:
-                print("File gagal dibaca:", e)
-
-        elif pilih == "8":
-            print("Python:", sys.version)
-            print("Executable:", sys.executable)
-            print("Platform:", platform.platform())
-
-        elif pilih == "0":
-            return
-
-        else:
-            print("Pilihan tidak tersedia.")
-
-
-# === MENU UTAMA ===
-def menu():
-    while True:
-        judul()
-        print("\033[38;5;208m[1] INFORMASI SISTEM ANDROID/TERMUX\033[0m")
-        print("\033[91m[2] CEK KONEKSI INTERNET\033[0m")
-        print("\033[38;5;208m[3] INFORMASI JARINGAN DAN IP\033[0m")
-        print("\033[91m[4] TOOLS PYTHON\033[0m")
-        print("\033[38;5;208m[5] PROFIL RENDY SUNANDAR\033[0m")
-        print("\033[91m[6] CYBERSECURITY TOOLS\033[0m")
-        print("\033[38;5;208m[0] KELUAR DARI MENU\033[0m")
-        print("================================" + RESET)
-
-        pilihan = input("Pilih menu: ").strip()
-
-        if pilihan == "1":
-            print(MERAH + "\n--- INFORMASI SISTEM ---")
-            print("Sistem :", platform.system())
-            print("Versi  :", platform.release())
-            print("Python :", platform.python_version())
-            print("Mesin  :", platform.machine())
-            print("Termux :", os.environ.get("PREFIX", "Tidak terdeteksi"))
-            print(RESET)
-
-        elif pilihan == "2":
-            print(MERAH + "\nMemeriksa koneksi internet...")
-            try:
-                req = urllib.request.Request(
-                    "https://www.google.com",
-                    method="HEAD",
-                    headers={"User-Agent": "TermuxMenu/1.0"}
-                )
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    print("Internet: TERHUBUNG")
-                    print("HTTP status:", response.status)
-            except Exception:
-                print("Internet tidak terjangkau atau pemeriksaan gagal.")
-                print("Periksa Wi-Fi/data seluler kamu.")
-            print(RESET)
-
-        elif pilihan == "3":
-            print(MERAH + "\n--- INFORMASI JARINGAN ---")
-            try:
-                host = socket.gethostname()
-                ip = socket.gethostbyname(host)
-                print("Hostname :", host)
-                print("IP lokal :", ip)
-                print("Catatan  : IP bisa berupa alamat loopback.")
-            except OSError as e:
-                print("Tidak dapat membaca informasi jaringan:", e)
-            print(RESET)
-
-        elif pilihan == "4":
-            print(MERAH + "\n--- TOOLS PYTHON ---")
-            print("1. Versi Python")
-            print("2. Versi pip")
-            sub = input("Pilih tools (1/2): ").strip()
-
-            if sub == "1":
-                print(sys.version)
-            elif sub == "2":
-                subprocess.run([sys.executable, "-m", "pip", "--version"])
-            else:
-                print("Pilihan tidak tersedia.")
-            print(RESET)
-
-        elif pilihan == "5":
-            print(MERAH + "\n--- PROFIL ---")
-            print("Nama     : Rendy Sunandar")
-            print("Lingkup  : Android dan Termux")
-            print("Minat    : Python dan networking")
-            print(RESET)
-
-        elif pilihan == "6":
-            cybersecurity_tools()
-
-        elif pilihan == "0":
-            print(MERAH + "Keluar dari menu. Sampai jumpa!" + RESET)
-            break
-
-        else:
-            print(MERAH + "Pilihan tidak tersedia." + RESET)
-
-        input("\nTekan Enter untuk kembali ke menu...")
-
-
-try:
-    menu()
-except (KeyboardInterrupt, EOFError):
-    print("\nMenu ditutup.")
+        print("[9] Ekstrak Zip/7z")
+        print("[10] Crack Password Zip/7z")
+        print("[0] Kembali ke
